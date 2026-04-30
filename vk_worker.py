@@ -42,7 +42,7 @@ def send_to_vk_groups(message_text, photo_paths):
     results = []
     try:
         logger.info("Запуск браузера...")
-        driver = uc.Chrome(options=chrome_options)
+        driver = uc.Chrome(options=chrome_options, version_main=147)
         driver.get("https://vk.com")
         time.sleep(3)
 

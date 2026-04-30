@@ -4,9 +4,10 @@ import logging
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import undetected_chromedriver as uc
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def send_to_vk_groups(message_text, photo_paths):
     password = os.getenv("VK_PASSWORD")
 
     if not login or not password:
-        err_msg = "Отсутствуют VK_LOGIN или VK_PASSWORD в переменных окружения"
+        err_msg = "Отсутствуют VK_LOGIN или VK_PASSWORD"
         logger.error(err_msg)
         return f"❌ Ошибка: {err_msg}"
     if not group_ids:
@@ -31,27 +32,25 @@ def send_to_vk_groups(message_text, photo_paths):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option("useAutomationExtension", False)
 
     driver = None
     results = []
     try:
-        logger.info("Запуск браузера...")
-        driver = uc.Chrome(options=chrome_options, version_main=147)
-        driver.get("https://vk.com")
+        logger.info("Запуск ChromeDriver...")
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         
-        # Ожидаем появления поля для логина (максимум 10 секунд)
+        driver.get("https://vk.com")
         wait = WebDriverWait(driver, 10)
         
-        # Пробуем найти поле ввода логина разными способами
-        try:
-            login_input = wait.until(EC.presence_of_element_located((By.NAME, "login")))
-        except:
-            # Если не нашли по name, ищем по другим селекторам
-            login_input = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='text']")))
-        
+        # Ввод логина
+        login_input = wait.until(EC.presence_of_element_located((By.NAME, "login")))
         login_input.send_keys(login)
         
-        # Поле для пароля
+        # Ввод пароля
         password_input = driver.find_element(By.NAME, "password")
         password_input.send_keys(password)
         
@@ -66,7 +65,7 @@ def send_to_vk_groups(message_text, photo_paths):
                 driver.get(f"https://vk.com/club{group_id_clean}")
                 time.sleep(5)
 
-                # Открытие формы предложки
+                # Открытие формы поста
                 try:
                     driver.find_element(By.XPATH, "//button[contains(@class, 'suggest')]").click()
                 except:
@@ -75,7 +74,8 @@ def send_to_vk_groups(message_text, photo_paths):
 
                 # Загрузка фото
                 for path in photo_paths:
-                    driver.find_element(By.XPATH, "//input[@type='file']").send_keys(os.path.abspath(path))
+                    file_input = driver.find_element(By.XPATH, "//input[@type='file']")
+                    file_input.send_keys(os.path.abspath(path))
                     time.sleep(2)
 
                 # Ввод текста
@@ -91,7 +91,7 @@ def send_to_vk_groups(message_text, photo_paths):
             except Exception as e:
                 err = str(e)[:150]
                 results.append(f"❌ Группа {gid}: ошибка — {err}")
-                logger.error(f"Ошибка при отправке в группу {gid}: {err}")
+                logger.error(f"Ошибка в группе {gid}: {err}")
             time.sleep(30)
 
         return "\n".join(results)
